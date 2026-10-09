@@ -33,3 +33,42 @@
     -fx-font-weight: bold;
     -fx-font-size: 16px;
 }
+
+.status {
+    -fx-text-fill: #6b7280;
+    -fx-font-size: 13px;
+}
+
+.translation {
+    -fx-text-fill: #6b7280;
+    -fx-font-style: italic;
+    -fx-font-size: 13px;
+}
+
+.correction-entry {
+    -fx-padding: 8;
+    -fx-background-color: white;
+    -fx-background-radius: 8;
+}
+
+.correction-said {
+    -fx-text-fill: #6b7280;
+    -fx-font-size: 13px;
+}
+
+.correction-wrong {
+    -fx-text-fill: #c0392b;
+}
+
+.correction-wrong .text {
+    -fx-strikethrough: true;
+}
+
+.correction-right {
+    -fx-text-fill: #1e8449;
+    -fx-font-weight: bold;
+}
+
+.correction-why {
+    -fx-font-size: 13px;
+}
