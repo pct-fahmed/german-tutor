@@ -1,0 +1,35 @@
+.root {
+    -fx-font-size: 15px;
+    -fx-background-color: #f6f7f9;
+}
+
+.chat, .chat > .viewport {
+    -fx-background-color: transparent;
+}
+
+.bubble {
+    -fx-padding: 8 12;
+    -fx-background-radius: 12;
+}
+
+.bubble-user {
+    -fx-background-color: #2f6fed;
+    -fx-text-fill: white;
+}
+
+.bubble-tutor {
+    -fx-background-color: white;
+    -fx-border-color: #dde1e7;
+    -fx-border-radius: 12;
+}
+
+.corrections {
+    -fx-background-color: #fffaf0;
+    -fx-border-color: #eadfc8;
+    -fx-border-width: 0 0 0 1;
+}
+
+.panel-title {
+    -fx-font-weight: bold;
+    -fx-font-size: 16px;
+}
