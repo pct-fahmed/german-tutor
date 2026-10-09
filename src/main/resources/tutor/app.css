@@ -83,3 +83,15 @@
     -fx-padding: 2 4;
     -fx-cursor: hand;
 }
+
+.top-bar {
+    -fx-background-color: white;
+    -fx-border-color: #dde1e7;
+    -fx-border-width: 0 0 1 0;
+}
+
+.mistake-count {
+    -fx-font-weight: bold;
+    -fx-text-fill: #b9770e;
+    -fx-min-width: 32px;
+}

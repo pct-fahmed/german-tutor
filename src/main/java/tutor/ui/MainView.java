@@ -6,7 +6,14 @@ import javafx.application.Platform;
 import javafx.concurrent.Task;
 import javafx.geometry.Insets;
 import javafx.geometry.Pos;
+import java.util.List;
+import java.util.function.Supplier;
+import javafx.scene.Scene;
+import javafx.scene.layout.Region;
+import javafx.stage.Modality;
+import javafx.stage.Stage;
 import javafx.scene.control.Button;
+import javafx.scene.control.ComboBox;
 import javafx.scene.control.Label;
 import javafx.scene.control.ScrollPane;
 import javafx.scene.control.TextField;
@@ -14,9 +21,12 @@ import javafx.scene.layout.BorderPane;
 import javafx.scene.layout.HBox;
 import javafx.scene.layout.Priority;
 import javafx.scene.layout.VBox;
+import tutor.ai.Scenario;
 import tutor.ai.TutorReply;
 import tutor.ai.TutorService;
 import tutor.config.AppConfig;
+import tutor.progress.MistakeLog;
+import tutor.progress.SessionLog;
 import tutor.speech.AudioRecorder;
 import tutor.speech.PiperSpeaker;
 import tutor.speech.WhisperTranscriber;
@@ -27,6 +37,8 @@ public class MainView extends BorderPane {
     private final AudioRecorder recorder = new AudioRecorder();
     private final WhisperTranscriber transcriber;
     private final PiperSpeaker speaker;
+    private final MistakeLog mistakeLog = new MistakeLog();
+    private final SessionLog sessionLog = new SessionLog();
     private boolean recording;
 
     private final VBox chat = new VBox(8);
@@ -36,6 +48,9 @@ public class MainView extends BorderPane {
     private final Button sendButton = new Button("Senden");
     private final Button talkButton = new Button("🎤 Sprechen");
     private final Label status = new Label();
+    private final ComboBox<Scenario> scenarioBox = new ComboBox<>();
+    private final Button restartButton = new Button("Neu starten");
+    private final Button mistakesButton = new Button("📒 Meine Fehler");
 
     public MainView(AppConfig config) {
         this.tutor = new TutorService(config);
@@ -66,6 +81,17 @@ public class MainView extends BorderPane {
         VBox bottom = new VBox(4, status, inputBar);
         bottom.setPadding(new Insets(8, 12, 12, 12));
 
+        scenarioBox.getItems().setAll(Scenario.values());
+        scenarioBox.setValue(Scenario.FREE);
+        Label scenarioLabel = new Label("Situation:");
+        Region spacer = new Region();
+        HBox.setHgrow(spacer, Priority.ALWAYS);
+        HBox topBar = new HBox(8, scenarioLabel, scenarioBox, restartButton, spacer, mistakesButton);
+        topBar.setAlignment(Pos.CENTER_LEFT);
+        topBar.setPadding(new Insets(8, 12, 8, 12));
+        topBar.getStyleClass().add("top-bar");
+
+        setTop(topBar);
         setCenter(chatScroll);
         setRight(correctionsPanel);
         setBottom(bottom);
@@ -73,8 +99,31 @@ public class MainView extends BorderPane {
         sendButton.setOnAction(e -> submit());
         input.setOnAction(e -> submit());
         talkButton.setOnAction(e -> toggleRecording());
+        scenarioBox.setOnAction(e -> startConversation());
+        restartButton.setOnAction(e -> startConversation());
+        mistakesButton.setOnAction(e -> showMistakes());
 
-        addTutorMessage("Hallo! Ich bin dein Deutschlehrer. Worüber möchtest du heute sprechen?", null);
+        startConversation();
+    }
+
+    private void startConversation() {
+        begin(scenarioBox.getValue(), null);
+    }
+
+    private void begin(Scenario scenario, List<String> practiceMistakes) {
+        speaker.stop();
+        chat.getChildren().clear();
+        corrections.getChildren().clear();
+        status.setText("");
+        tutor.reset(scenario);
+        sessionLog.start(practiceMistakes != null ? "Fehler üben" : scenario.toString());
+        if (practiceMistakes != null) {
+            askTutor(() -> tutor.startPractice(practiceMistakes), null);
+        } else if (scenario.isRolePlay()) {
+            askTutor(tutor::startRolePlay, null);
+        } else {
+            addTutorMessage("Hallo! Ich bin dein Deutschlehrer. Worüber möchtest du heute sprechen?", null);
+        }
     }
 
     private void submit() {
@@ -150,17 +199,24 @@ public class MainView extends BorderPane {
 
     public void sendToTutor(String text) {
         addUserMessage(text);
+        askTutor(() -> tutor.send(text), text);
+    }
+
+    private void askTutor(Supplier<TutorReply> request, String userText) {
         setBusy(true);
 
         Task<TutorReply> task = new Task<>() {
             @Override
             protected TutorReply call() {
-                return tutor.send(text);
+                return request.get();
             }
         };
         task.setOnSucceeded(e -> {
             TutorReply reply = task.getValue();
-            showCorrections(text, reply.corrections());
+            if (userText != null) {
+                showCorrections(userText, reply.corrections());
+            }
+            saveProgress(userText, reply);
             addTutorMessage(reply.reply(), reply.replyEnglish());
             setBusy(false);
             speak(reply.reply());
@@ -170,6 +226,79 @@ public class MainView extends BorderPane {
             setBusy(false, false);
         });
         Thread.ofVirtual().start(task);
+    }
+
+    private void saveProgress(String userText, TutorReply reply) {
+        try {
+            if (userText != null) {
+                mistakeLog.add(userText, reply.corrections());
+                sessionLog.learner(userText, reply.corrections());
+            }
+            sessionLog.tutor(reply.reply(), reply.replyEnglish());
+        } catch (RuntimeException ex) {
+            status.setText("Fehler beim Speichern: " + ex.getMessage());
+        }
+    }
+
+    private void showMistakes() {
+        List<MistakeLog.Summary> summary;
+        try {
+            summary = mistakeLog.summary();
+        } catch (RuntimeException ex) {
+            status.setText("Fehler beim Laden: " + ex.getMessage());
+            return;
+        }
+
+        Stage dialog = new Stage();
+        dialog.initOwner(getScene().getWindow());
+        dialog.initModality(Modality.WINDOW_MODAL);
+        dialog.setTitle("Meine Fehler");
+
+        VBox list = new VBox(10);
+        list.setPadding(new Insets(12));
+        if (summary.isEmpty()) {
+            list.getChildren().add(new Label("Noch keine Fehler gespeichert. Sprich mit dem Tutor!"));
+        }
+        for (MistakeLog.Summary m : summary) {
+            Label count = new Label(m.count() + "×");
+            count.getStyleClass().add("mistake-count");
+            Label wrong = new Label(m.original());
+            wrong.getStyleClass().add("correction-wrong");
+            Label right = new Label(m.corrected());
+            right.getStyleClass().add("correction-right");
+            HBox change = new HBox(6, count, wrong, new Label("→"), right);
+            change.setAlignment(Pos.CENTER_LEFT);
+            Label why = new Label(m.explanation());
+            why.setWrapText(true);
+            why.getStyleClass().add("correction-why");
+            VBox entry = new VBox(4, change, why);
+            entry.getStyleClass().add("correction-entry");
+            list.getChildren().add(entry);
+        }
+        ScrollPane scroll = new ScrollPane(list);
+        scroll.setFitToWidth(true);
+        VBox.setVgrow(scroll, Priority.ALWAYS);
+
+        Button practise = new Button("Mit dem Tutor üben");
+        practise.setDisable(summary.isEmpty());
+        practise.setOnAction(e -> {
+            dialog.close();
+            List<String> top = summary.stream().limit(5)
+                    .map(m -> m.original() + " → " + m.corrected() + " (" + m.explanation() + ")")
+                    .toList();
+            scenarioBox.setOnAction(null);
+            scenarioBox.setValue(Scenario.FREE);
+            scenarioBox.setOnAction(ev -> startConversation());
+            begin(Scenario.FREE, top);
+        });
+        HBox actions = new HBox(practise);
+        actions.setAlignment(Pos.CENTER_RIGHT);
+        actions.setPadding(new Insets(0, 12, 12, 12));
+
+        Scene scene = new Scene(new VBox(scroll, actions), 520, 560);
+        scene.getStylesheets().addAll(getScene().getStylesheets());
+        dialog.setScene(scene);
+        dialog.show();
     }
 
     private void speak(String text) {
@@ -192,6 +321,9 @@ public class MainView extends BorderPane {
     private void setBusy(boolean busy, boolean clearStatus) {
         setInputEnabled(!busy);
         talkButton.setDisable(busy);
+        scenarioBox.setDisable(busy);
+        restartButton.setDisable(busy);
+        mistakesButton.setDisable(busy);
         if (busy) {
             status.setText("Der Tutor denkt nach …");
         } else {

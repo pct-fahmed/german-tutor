@@ -28,14 +28,46 @@ public class TutorService {
             continue in German.
             - The learner's text may come from speech recognition, so ignore missing punctuation \
             and capitalisation.
+            - Text in square brackets is an instruction from the app, not from the learner; \
+            never correct it.
             """;
+
+    private static final String ROLE_PLAY = """
+
+            Role-play: %s
+            Stay in your role, keep the situation realistic and let the learner do most of the talking.
+            """;
+
+    private static final String START_ROLE_PLAY = "[Begin the role-play now with your first line.]";
 
     private final AnthropicClient client = AnthropicOkHttpClient.fromEnv();
     private final AppConfig config;
     private final List<BetaMessageParam> history = new ArrayList<>();
+    private Scenario scenario = Scenario.FREE;
 
     public TutorService(AppConfig config) {
         this.config = config;
+    }
+
+    public synchronized void reset(Scenario scenario) {
+        this.scenario = scenario;
+        history.clear();
+    }
+
+    // Lets the tutor speak first in a role-play
+    public TutorReply startRolePlay() {
+        return send(START_ROLE_PLAY);
+    }
+
+    public TutorReply startPractice(List<String> mistakes) {
+        return send("[The learner often makes these mistakes:\n- " + String.join("\n- ", mistakes)
+                + "\nStart a short conversation that makes the learner use these forms again. "
+                + "Ask one simple question at a time.]");
+    }
+
+    private String systemPrompt() {
+        String prompt = SYSTEM_PROMPT.formatted(config.level());
+        return scenario.isRolePlay() ? prompt + ROLE_PLAY.formatted(scenario.rolePlay()) : prompt;
     }
 
     public synchronized TutorReply send(String userText) {
@@ -47,7 +79,7 @@ public class TutorService {
         MessageCreateParams.Builder params = MessageCreateParams.builder()
                 .model(config.model())
                 .maxTokens(4000L)
-                .system(SYSTEM_PROMPT.formatted(config.level()))
+                .system(systemPrompt())
                 .messages(history)
                 .addBeta("server-side-fallback-2026-07-01")
                 .putAdditionalBodyProperty("fallbacks", JsonValue.from("default"));
