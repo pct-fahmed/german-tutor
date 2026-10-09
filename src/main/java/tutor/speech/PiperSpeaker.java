@@ -6,17 +6,12 @@ import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.List;
-import java.util.concurrent.CountDownLatch;
-import javax.sound.sampled.AudioInputStream;
-import javax.sound.sampled.AudioSystem;
-import javax.sound.sampled.Clip;
-import javax.sound.sampled.LineEvent;
 import tutor.config.AppConfig;
 
 public class PiperSpeaker {
 
     private final AppConfig config;
-    private Clip current;
+    private Process current;
 
     public PiperSpeaker(AppConfig config) {
         this.config = config;
@@ -41,7 +36,7 @@ public class PiperSpeaker {
 
     public synchronized void stop() {
         if (current != null) {
-            current.stop();
+            current.destroy();
         }
     }
 
@@ -63,22 +58,16 @@ public class PiperSpeaker {
         }
     }
 
+    // paplay goes through the sound server, like Mic
     private void play(Path wav) throws Exception {
-        CountDownLatch done = new CountDownLatch(1);
-        try (AudioInputStream in = AudioSystem.getAudioInputStream(wav.toFile());
-             Clip clip = AudioSystem.getClip()) {
-            clip.addLineListener(e -> {
-                if (e.getType() == LineEvent.Type.STOP) {
-                    done.countDown();
-                }
-            });
-            clip.open(in);
-            synchronized (this) {
-                stop();
-                current = clip;
-            }
-            clip.start();
-            done.await();
+        Process process = new ProcessBuilder(List.of("paplay", wav.toString()))
+                .redirectOutput(ProcessBuilder.Redirect.DISCARD)
+                .redirectError(ProcessBuilder.Redirect.DISCARD)
+                .start();
+        synchronized (this) {
+            stop();
+            current = process;
         }
+        process.waitFor();
     }
 }

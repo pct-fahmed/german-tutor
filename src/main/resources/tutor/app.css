@@ -95,3 +95,8 @@
     -fx-text-fill: #b9770e;
     -fx-min-width: 32px;
 }
+
+.toggle-button:selected {
+    -fx-background-color: #1e8449;
+    -fx-text-fill: white;
+}

@@ -15,7 +15,9 @@ public record AppConfig(
         Path whisperModel,
         Path piperBinary,
         Path piperVoice,
-        double speechSlowness) {
+        double speechSlowness,
+        int listenSilenceMs,
+        double listenSensitivity) {
 
     public static final Path CONFIG_DIR = Path.of(System.getProperty("user.home"), ".german-tutor");
     public static final Path CONFIG_FILE = CONFIG_DIR.resolve("config.properties");
@@ -38,7 +40,9 @@ public record AppConfig(
                 path(p, "whisper.model", "models/ggml-small.bin"),
                 path(p, "piper.binary", "bin/piper/piper"),
                 path(p, "piper.voice", "models/de_DE-thorsten-medium.onnx"),
-                Double.parseDouble(p.getProperty("piper.lengthScale", "1.15")));
+                Double.parseDouble(p.getProperty("piper.lengthScale", "1.15")),
+                Integer.parseInt(p.getProperty("listen.silenceMs", "1200")),
+                Double.parseDouble(p.getProperty("listen.sensitivity", "1.0")));
     }
 
     private static Path path(Properties p, String key, String defaultRelative) {

@@ -10,7 +10,7 @@ By default the tutor runs through your logged-in Claude Code CLI (`claude -p`), 
 
 - Linux x86_64, Java 21+, Maven
 - `git`, `curl`, `g++`, `python3` (for the one-time Whisper build)
-- A microphone and speakers
+- A microphone and speakers (a headset works best), PulseAudio or PipeWire with `parecord`/`paplay` (package `pulseaudio-utils`)
 - [Claude Code](https://claude.com/claude-code) installed and logged in (`claude` on your PATH), or a Claude API key
 
 ## Setup
@@ -25,6 +25,7 @@ mvn javafx:run
 
 ## Using it
 
+- **🎙 Immer zuhören** turns on hands-free mode: just talk, a pause of about a second sends your sentence. The mic is muted while the tutor thinks and speaks.
 - **🎤 Sprechen** starts recording, **⏹ Stopp** ends it. Your sentence appears exactly as Whisper heard it.
 - Click a tutor message to show the English translation, **🔊** to hear it again.
 - **Korrekturen** on the right lists your mistakes with a short explanation.
@@ -44,6 +45,9 @@ model=claude-opus-5
 level=A2
 # higher = slower speech
 piper.lengthScale=1.15
+# hands-free: pause that ends a sentence, and how easily speech is detected (higher = more sensitive)
+listen.silenceMs=1200
+listen.sensitivity=1.0
 whisper.model=/home/me/.german-tutor/models/ggml-medium.bin
 ```
 

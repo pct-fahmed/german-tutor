@@ -17,6 +17,7 @@ import javafx.scene.control.ComboBox;
 import javafx.scene.control.Label;
 import javafx.scene.control.ScrollPane;
 import javafx.scene.control.TextField;
+import javafx.scene.control.ToggleButton;
 import javafx.scene.layout.BorderPane;
 import javafx.scene.layout.HBox;
 import javafx.scene.layout.Priority;
@@ -29,6 +30,7 @@ import tutor.progress.MistakeLog;
 import tutor.progress.SessionLog;
 import tutor.speech.AudioRecorder;
 import tutor.speech.PiperSpeaker;
+import tutor.speech.VoiceListener;
 import tutor.speech.WhisperTranscriber;
 
 public class MainView extends BorderPane {
@@ -39,7 +41,10 @@ public class MainView extends BorderPane {
     private final PiperSpeaker speaker;
     private final MistakeLog mistakeLog = new MistakeLog();
     private final SessionLog sessionLog = new SessionLog();
+    private final VoiceListener listener;
     private boolean recording;
+    // Things that must not be overheard: tutor thinking, speaking, transcribing
+    private int listenHolds;
 
     private final VBox chat = new VBox(8);
     private final ScrollPane chatScroll = new ScrollPane(chat);
@@ -47,6 +52,7 @@ public class MainView extends BorderPane {
     private final TextField input = new TextField();
     private final Button sendButton = new Button("Senden");
     private final Button talkButton = new Button("🎤 Sprechen");
+    private final ToggleButton handsFreeToggle = new ToggleButton("🎙 Immer zuhören");
     private final Label status = new Label();
     private final ComboBox<Scenario> scenarioBox = new ComboBox<>();
     private final Button restartButton = new Button("Neu starten");
@@ -56,6 +62,10 @@ public class MainView extends BorderPane {
         this.tutor = Tutor.create(config);
         this.transcriber = new WhisperTranscriber(config);
         this.speaker = new PiperSpeaker(config);
+        this.listener = new VoiceListener(config.listenSilenceMs(), config.listenSensitivity(),
+                hearing -> Platform.runLater(() -> status.setText(
+                        hearing ? "Ich höre dich …" : "Ich höre zu … sprich einfach los.")),
+                pcm -> Platform.runLater(() -> transcribeAndSend(() -> AudioRecorder.writeWav(pcm))));
 
         chat.setPadding(new Insets(12));
         chatScroll.setFitToWidth(true);
@@ -76,7 +86,7 @@ public class MainView extends BorderPane {
         input.setPromptText("Schreib etwas auf Deutsch …");
         HBox.setHgrow(input, Priority.ALWAYS);
         status.getStyleClass().add("status");
-        HBox inputBar = new HBox(8, talkButton, input, sendButton);
+        HBox inputBar = new HBox(8, handsFreeToggle, talkButton, input, sendButton);
         inputBar.setAlignment(Pos.CENTER);
         VBox bottom = new VBox(4, status, inputBar);
         bottom.setPadding(new Insets(8, 12, 12, 12));
@@ -99,6 +109,7 @@ public class MainView extends BorderPane {
         sendButton.setOnAction(e -> submit());
         input.setOnAction(e -> submit());
         talkButton.setOnAction(e -> toggleRecording());
+        handsFreeToggle.setOnAction(e -> toggleHandsFree());
         scenarioBox.setOnAction(e -> startConversation());
         restartButton.setOnAction(e -> startConversation());
         mistakesButton.setOnAction(e -> showMistakes());
@@ -146,6 +157,7 @@ public class MainView extends BorderPane {
                 return;
             }
             recording = true;
+            handsFreeToggle.setDisable(true);
             talkButton.setText("⏹ Stopp");
             talkButton.getStyleClass().add("recording");
             input.setDisable(true);
@@ -157,13 +169,60 @@ public class MainView extends BorderPane {
         recording = false;
         talkButton.setText("🎤 Sprechen");
         talkButton.getStyleClass().remove("recording");
+        handsFreeToggle.setDisable(false);
+        transcribeAndSend(recorder::stop);
+    }
+
+    private void toggleHandsFree() {
+        if (handsFreeToggle.isSelected()) {
+            try {
+                transcriber.checkInstalled();
+                listener.start();
+            } catch (Exception ex) {
+                handsFreeToggle.setSelected(false);
+                status.setText("Fehler: " + ex.getMessage());
+                return;
+            }
+            talkButton.setDisable(true);
+            if (listenHolds > 0) {
+                listener.pause();
+            } else {
+                status.setText("Ich höre zu … sprich einfach los.");
+            }
+        } else {
+            listener.stop();
+            talkButton.setDisable(listenHolds > 0);
+            status.setText("");
+        }
+    }
+
+    private void holdListening() {
+        listenHolds++;
+        listener.pause();
+    }
+
+    private void releaseListening() {
+        listenHolds = Math.max(0, listenHolds - 1);
+        if (listenHolds == 0 && handsFreeToggle.isSelected()) {
+            listener.resume();
+            status.setText("Ich höre zu … sprich einfach los.");
+        }
+    }
+
+    private interface WavSource {
+        Path get() throws Exception;
+    }
+
+    private void transcribeAndSend(WavSource source) {
+        holdListening();
         talkButton.setDisable(true);
+        setInputEnabled(false);
         status.setText("Ich schreibe auf, was du gesagt hast …");
 
         Task<String> task = new Task<>() {
             @Override
             protected String call() throws Exception {
-                Path wav = recorder.stop();
+                Path wav = source.get();
                 if (wav == null) {
                     return "";
                 }
@@ -175,19 +234,19 @@ public class MainView extends BorderPane {
             }
         };
         task.setOnSucceeded(e -> {
-            talkButton.setDisable(false);
             String text = task.getValue();
-            if (text.isBlank()) {
-                status.setText("Ich habe nichts gehört. Versuch es noch einmal.");
-                setInputEnabled(true);
-                return;
+            if (WhisperTranscriber.isJunk(text)) {
+                status.setText("Ich habe nichts verstanden. Versuch es noch einmal.");
+                setBusy(false, false);
+            } else {
+                sendToTutor(text);
             }
-            sendToTutor(text);
+            releaseListening();
         });
         task.setOnFailed(e -> {
-            talkButton.setDisable(false);
             status.setText("Fehler: " + task.getException().getMessage());
-            setInputEnabled(true);
+            setBusy(false, false);
+            releaseListening();
         });
         Thread.ofVirtual().start(task);
     }
@@ -204,6 +263,7 @@ public class MainView extends BorderPane {
 
     private void askTutor(Supplier<TutorReply> request, String userText) {
         setBusy(true);
+        holdListening();
 
         Task<TutorReply> task = new Task<>() {
             @Override
@@ -220,10 +280,12 @@ public class MainView extends BorderPane {
             addTutorMessage(reply.reply(), reply.replyEnglish());
             setBusy(false);
             speak(reply.reply());
+            releaseListening();
         });
         task.setOnFailed(e -> {
             status.setText("Fehler: " + task.getException().getMessage());
             setBusy(false, false);
+            releaseListening();
         });
         Thread.ofVirtual().start(task);
     }
@@ -305,11 +367,17 @@ public class MainView extends BorderPane {
         if (!speaker.isInstalled()) {
             return;
         }
+        holdListening();
+        if (handsFreeToggle.isSelected()) {
+            status.setText("Der Tutor spricht …");
+        }
         Thread.ofVirtual().start(() -> {
             try {
                 speaker.speak(text);
             } catch (Exception ex) {
                 Platform.runLater(() -> status.setText("Fehler beim Vorlesen: " + ex.getMessage()));
+            } finally {
+                Platform.runLater(this::releaseListening);
             }
         });
     }
@@ -320,7 +388,7 @@ public class MainView extends BorderPane {
 
     private void setBusy(boolean busy, boolean clearStatus) {
         setInputEnabled(!busy);
-        talkButton.setDisable(busy);
+        talkButton.setDisable(busy || handsFreeToggle.isSelected());
         scenarioBox.setDisable(busy);
         restartButton.setDisable(busy);
         mistakesButton.setDisable(busy);
