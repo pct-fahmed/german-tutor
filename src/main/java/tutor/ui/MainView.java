@@ -2,6 +2,7 @@ package tutor.ui;
 
 import java.nio.file.Files;
 import java.nio.file.Path;
+import javafx.application.Platform;
 import javafx.concurrent.Task;
 import javafx.geometry.Insets;
 import javafx.geometry.Pos;
@@ -17,6 +18,7 @@ import tutor.ai.TutorReply;
 import tutor.ai.TutorService;
 import tutor.config.AppConfig;
 import tutor.speech.AudioRecorder;
+import tutor.speech.PiperSpeaker;
 import tutor.speech.WhisperTranscriber;
 
 public class MainView extends BorderPane {
@@ -24,6 +26,7 @@ public class MainView extends BorderPane {
     private final TutorService tutor;
     private final AudioRecorder recorder = new AudioRecorder();
     private final WhisperTranscriber transcriber;
+    private final PiperSpeaker speaker;
     private boolean recording;
 
     private final VBox chat = new VBox(8);
@@ -37,6 +40,7 @@ public class MainView extends BorderPane {
     public MainView(AppConfig config) {
         this.tutor = new TutorService(config);
         this.transcriber = new WhisperTranscriber(config);
+        this.speaker = new PiperSpeaker(config);
 
         chat.setPadding(new Insets(12));
         chatScroll.setFitToWidth(true);
@@ -84,6 +88,7 @@ public class MainView extends BorderPane {
 
     private void toggleRecording() {
         if (!recording) {
+            speaker.stop();
             try {
                 transcriber.checkInstalled();
                 recorder.start();
@@ -158,12 +163,26 @@ public class MainView extends BorderPane {
             showCorrections(text, reply.corrections());
             addTutorMessage(reply.reply(), reply.replyEnglish());
             setBusy(false);
+            speak(reply.reply());
         });
         task.setOnFailed(e -> {
             status.setText("Fehler: " + task.getException().getMessage());
             setBusy(false, false);
         });
         Thread.ofVirtual().start(task);
+    }
+
+    private void speak(String text) {
+        if (!speaker.isInstalled()) {
+            return;
+        }
+        Thread.ofVirtual().start(() -> {
+            try {
+                speaker.speak(text);
+            } catch (Exception ex) {
+                Platform.runLater(() -> status.setText("Fehler beim Vorlesen: " + ex.getMessage()));
+            }
+        });
     }
 
     private void setBusy(boolean busy) {
@@ -209,14 +228,14 @@ public class MainView extends BorderPane {
     }
 
     public void addUserMessage(String text) {
-        chat.getChildren().add(bubble(text, null, "bubble-user", Pos.CENTER_RIGHT));
+        chat.getChildren().add(bubble(text, null, "bubble-user", Pos.CENTER_RIGHT, false));
     }
 
     public void addTutorMessage(String text, String translation) {
-        chat.getChildren().add(bubble(text, translation, "bubble-tutor", Pos.CENTER_LEFT));
+        chat.getChildren().add(bubble(text, translation, "bubble-tutor", Pos.CENTER_LEFT, true));
     }
 
-    private HBox bubble(String text, String translation, String styleClass, Pos alignment) {
+    private HBox bubble(String text, String translation, String styleClass, Pos alignment, boolean speakable) {
         Label label = new Label(text);
         label.setWrapText(true);
         VBox content = new VBox(4, label);
@@ -234,7 +253,13 @@ public class MainView extends BorderPane {
         }
         content.setMaxWidth(480);
         content.getStyleClass().addAll("bubble", styleClass);
-        HBox row = new HBox(content);
+        HBox row = new HBox(6, content);
+        if (speakable) {
+            Button replay = new Button("🔊");
+            replay.getStyleClass().add("replay");
+            replay.setOnAction(e -> speak(text));
+            row.getChildren().add(replay);
+        }
         row.setAlignment(alignment);
         return row;
     }

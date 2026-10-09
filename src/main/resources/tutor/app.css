@@ -77,3 +77,9 @@
     -fx-background-color: #c0392b;
     -fx-text-fill: white;
 }
+
+.replay {
+    -fx-background-color: transparent;
+    -fx-padding: 2 4;
+    -fx-cursor: hand;
+}
