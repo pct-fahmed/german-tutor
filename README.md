@@ -36,7 +36,7 @@ Optional, in `~/.german-tutor/config.properties`:
 
 ```properties
 # claude-haiku-5-5 is faster and cheaper
-model=claude-opus-5-5
+model=claude-opus-5
 # A1 .. C1
 level=A2
 # higher = slower speech

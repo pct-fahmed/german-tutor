@@ -28,7 +28,7 @@ public record AppConfig(
             }
         }
         return new AppConfig(
-                p.getProperty("model", "claude-opus-5-5"),
+                p.getProperty("model", "claude-opus-5"),
                 p.getProperty("level", "A2"),
                 path(p, "whisper.binary", "bin/whisper-cli"),
                 path(p, "whisper.model", "models/ggml-small.bin"),
