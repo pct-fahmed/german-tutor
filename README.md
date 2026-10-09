@@ -25,8 +25,7 @@ mvn javafx:run
 
 ## Using it
 
-- **🎙 Immer zuhören** turns on hands-free mode: just talk, a pause of about a second sends your sentence. The mic is muted while the tutor thinks and speaks.
-- **🎤 Sprechen** starts recording, **⏹ Stopp** ends it. Your sentence appears exactly as Whisper heard it.
+- The app is speaking-only: **🎤 Sprechen** starts recording, **⏹ Stopp** ends it and sends it. Your sentence appears exactly as Whisper heard it.
 - Click a tutor message to show the English translation, **🔊** to hear it again.
 - **Korrekturen** on the right lists your mistakes with a short explanation.
 - **Situation** switches to a role-play (Bäcker, Arzt, Restaurant, …), where the tutor speaks first.
@@ -45,9 +44,6 @@ model=claude-opus-5
 level=A2
 # higher = slower speech
 piper.lengthScale=1.15
-# hands-free: pause that ends a sentence, and how easily speech is detected (higher = more sensitive)
-listen.silenceMs=1200
-listen.sensitivity=1.0
 whisper.model=/home/me/.german-tutor/models/ggml-medium.bin
 ```
 

@@ -96,7 +96,8 @@
     -fx-min-width: 32px;
 }
 
-.toggle-button:selected {
-    -fx-background-color: #1e8449;
-    -fx-text-fill: white;
+.talk {
+    -fx-font-size: 18px;
+    -fx-padding: 10 28;
+    -fx-background-radius: 24;
 }
