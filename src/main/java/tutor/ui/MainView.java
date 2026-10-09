@@ -1,5 +1,7 @@
 package tutor.ui;
 
+import java.nio.file.Files;
+import java.nio.file.Path;
 import javafx.concurrent.Task;
 import javafx.geometry.Insets;
 import javafx.geometry.Pos;
@@ -14,10 +16,15 @@ import javafx.scene.layout.VBox;
 import tutor.ai.TutorReply;
 import tutor.ai.TutorService;
 import tutor.config.AppConfig;
+import tutor.speech.AudioRecorder;
+import tutor.speech.WhisperTranscriber;
 
 public class MainView extends BorderPane {
 
     private final TutorService tutor;
+    private final AudioRecorder recorder = new AudioRecorder();
+    private final WhisperTranscriber transcriber;
+    private boolean recording;
 
     private final VBox chat = new VBox(8);
     private final ScrollPane chatScroll = new ScrollPane(chat);
@@ -29,6 +36,7 @@ public class MainView extends BorderPane {
 
     public MainView(AppConfig config) {
         this.tutor = new TutorService(config);
+        this.transcriber = new WhisperTranscriber(config);
 
         chat.setPadding(new Insets(12));
         chatScroll.setFitToWidth(true);
@@ -48,7 +56,6 @@ public class MainView extends BorderPane {
 
         input.setPromptText("Schreib etwas auf Deutsch …");
         HBox.setHgrow(input, Priority.ALWAYS);
-        talkButton.setDisable(true);
         status.getStyleClass().add("status");
         HBox inputBar = new HBox(8, talkButton, input, sendButton);
         inputBar.setAlignment(Pos.CENTER);
@@ -61,6 +68,7 @@ public class MainView extends BorderPane {
 
         sendButton.setOnAction(e -> submit());
         input.setOnAction(e -> submit());
+        talkButton.setOnAction(e -> toggleRecording());
 
         addTutorMessage("Hallo! Ich bin dein Deutschlehrer. Worüber möchtest du heute sprechen?", null);
     }
@@ -72,6 +80,67 @@ public class MainView extends BorderPane {
         }
         input.clear();
         sendToTutor(text);
+    }
+
+    private void toggleRecording() {
+        if (!recording) {
+            try {
+                transcriber.checkInstalled();
+                recorder.start();
+            } catch (Exception ex) {
+                status.setText("Fehler: " + ex.getMessage());
+                return;
+            }
+            recording = true;
+            talkButton.setText("⏹ Stopp");
+            talkButton.getStyleClass().add("recording");
+            input.setDisable(true);
+            sendButton.setDisable(true);
+            status.setText("Ich höre zu … klick auf Stopp, wenn du fertig bist.");
+            return;
+        }
+
+        recording = false;
+        talkButton.setText("🎤 Sprechen");
+        talkButton.getStyleClass().remove("recording");
+        talkButton.setDisable(true);
+        status.setText("Ich schreibe auf, was du gesagt hast …");
+
+        Task<String> task = new Task<>() {
+            @Override
+            protected String call() throws Exception {
+                Path wav = recorder.stop();
+                if (wav == null) {
+                    return "";
+                }
+                try {
+                    return transcriber.transcribe(wav);
+                } finally {
+                    Files.deleteIfExists(wav);
+                }
+            }
+        };
+        task.setOnSucceeded(e -> {
+            talkButton.setDisable(false);
+            String text = task.getValue();
+            if (text.isBlank()) {
+                status.setText("Ich habe nichts gehört. Versuch es noch einmal.");
+                setInputEnabled(true);
+                return;
+            }
+            sendToTutor(text);
+        });
+        task.setOnFailed(e -> {
+            talkButton.setDisable(false);
+            status.setText("Fehler: " + task.getException().getMessage());
+            setInputEnabled(true);
+        });
+        Thread.ofVirtual().start(task);
+    }
+
+    private void setInputEnabled(boolean enabled) {
+        input.setDisable(!enabled);
+        sendButton.setDisable(!enabled);
     }
 
     public void sendToTutor(String text) {
@@ -102,8 +171,8 @@ public class MainView extends BorderPane {
     }
 
     private void setBusy(boolean busy, boolean clearStatus) {
-        input.setDisable(busy);
-        sendButton.setDisable(busy);
+        setInputEnabled(!busy);
+        talkButton.setDisable(busy);
         if (busy) {
             status.setText("Der Tutor denkt nach …");
         } else {
