@@ -23,7 +23,7 @@ import javafx.scene.layout.Priority;
 import javafx.scene.layout.VBox;
 import tutor.ai.Scenario;
 import tutor.ai.TutorReply;
-import tutor.ai.TutorService;
+import tutor.ai.Tutor;
 import tutor.config.AppConfig;
 import tutor.progress.MistakeLog;
 import tutor.progress.SessionLog;
@@ -33,7 +33,7 @@ import tutor.speech.WhisperTranscriber;
 
 public class MainView extends BorderPane {
 
-    private final TutorService tutor;
+    private final Tutor tutor;
     private final AudioRecorder recorder = new AudioRecorder();
     private final WhisperTranscriber transcriber;
     private final PiperSpeaker speaker;
@@ -53,7 +53,7 @@ public class MainView extends BorderPane {
     private final Button mistakesButton = new Button("📒 Meine Fehler");
 
     public MainView(AppConfig config) {
-        this.tutor = new TutorService(config);
+        this.tutor = Tutor.create(config);
         this.transcriber = new WhisperTranscriber(config);
         this.speaker = new PiperSpeaker(config);
 

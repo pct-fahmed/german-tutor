@@ -7,6 +7,8 @@ import java.nio.file.Path;
 import java.util.Properties;
 
 public record AppConfig(
+        String backend,
+        String claudeBinary,
         String model,
         String level,
         Path whisperBinary,
@@ -28,6 +30,8 @@ public record AppConfig(
             }
         }
         return new AppConfig(
+                p.getProperty("backend", "claude-code"),
+                p.getProperty("claude.binary", "claude"),
                 p.getProperty("model", "claude-opus-5"),
                 p.getProperty("level", "A2"),
                 path(p, "whisper.binary", "bin/whisper-cli"),
