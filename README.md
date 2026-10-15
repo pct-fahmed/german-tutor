@@ -28,6 +28,7 @@ mvn javafx:run
 - The app is speaking-only: **🎤 Sprechen** starts recording, **⏹ Stopp** ends it and sends it. Your sentence appears exactly as Whisper heard it.
 - Click a tutor message to show the English translation, **🔊** to hear it again.
 - **Korrekturen** on the right lists your mistakes with a short explanation.
+- **Niveau** (A1 … C1) sets how hard the tutor speaks; changing it starts a new conversation and is remembered.
 - **Situation** switches to a role-play (Bäcker, Arzt, Restaurant, …), where the tutor speaks first.
 - **📒 Meine Fehler** shows the mistakes you make most often; **Mit dem Tutor üben** starts a conversation that practises them.
 
@@ -41,7 +42,7 @@ backend=claude-code
 # claude-haiku-5-5 is faster and cheaper
 model=claude-opus-5
 # A1 .. C1
-level=A2
+level=B1
 # higher = slower speech
 piper.lengthScale=1.15
 whisper.model=/home/me/.german-tutor/models/ggml-medium.bin

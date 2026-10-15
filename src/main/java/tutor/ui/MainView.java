@@ -15,6 +15,8 @@ import javafx.stage.Stage;
 import javafx.scene.control.Button;
 import javafx.scene.control.ComboBox;
 import javafx.scene.control.Label;
+import javafx.scene.control.RadioButton;
+import javafx.scene.control.ToggleGroup;
 import javafx.scene.control.ScrollPane;
 import javafx.scene.layout.BorderPane;
 import javafx.scene.layout.HBox;
@@ -48,6 +50,8 @@ public class MainView extends BorderPane {
     private final ComboBox<Scenario> scenarioBox = new ComboBox<>();
     private final Button restartButton = new Button("Neu starten");
     private final Button mistakesButton = new Button("📒 Meine Fehler");
+    private final ToggleGroup levelGroup = new ToggleGroup();
+    private final HBox levelBox = new HBox(6);
 
     public MainView(AppConfig config) {
         this.tutor = Tutor.create(config);
@@ -81,7 +85,16 @@ public class MainView extends BorderPane {
         Label scenarioLabel = new Label("Situation:");
         Region spacer = new Region();
         HBox.setHgrow(spacer, Priority.ALWAYS);
-        HBox topBar = new HBox(8, scenarioLabel, scenarioBox, restartButton, spacer, mistakesButton);
+        for (String level : AppConfig.LEVELS) {
+            RadioButton option = new RadioButton(level);
+            option.setUserData(level);
+            option.setToggleGroup(levelGroup);
+            option.setSelected(level.equals(tutor.level()));
+            levelBox.getChildren().add(option);
+        }
+        levelBox.setAlignment(Pos.CENTER_LEFT);
+        HBox topBar = new HBox(8, scenarioLabel, scenarioBox, restartButton, spacer,
+                new Label("Niveau:"), levelBox, mistakesButton);
         topBar.setAlignment(Pos.CENTER_LEFT);
         topBar.setPadding(new Insets(8, 12, 8, 12));
         topBar.getStyleClass().add("top-bar");
@@ -95,12 +108,30 @@ public class MainView extends BorderPane {
         scenarioBox.setOnAction(e -> startConversation());
         restartButton.setOnAction(e -> startConversation());
         mistakesButton.setOnAction(e -> showMistakes());
+        levelGroup.selectedToggleProperty().addListener((obs, old, selected) -> {
+            if (selected != null) {
+                changeLevel((String) selected.getUserData());
+            }
+        });
 
         startConversation();
     }
 
     private void startConversation() {
         begin(scenarioBox.getValue(), null);
+    }
+
+    private void changeLevel(String level) {
+        tutor.setLevel(level);
+        if (getScene() != null && getScene().getWindow() instanceof Stage stage) {
+            stage.setTitle("Deutsch Tutor (" + level + ")");
+        }
+        startConversation();
+        try {
+            AppConfig.saveLevel(level);
+        } catch (RuntimeException ex) {
+            status.setText("Fehler beim Speichern: " + ex.getMessage());
+        }
     }
 
     private void begin(Scenario scenario, List<String> practiceMistakes) {
@@ -306,6 +337,7 @@ public class MainView extends BorderPane {
         scenarioBox.setDisable(busy);
         restartButton.setDisable(busy);
         mistakesButton.setDisable(busy);
+        levelBox.setDisable(busy);
         if (busy) {
             status.setText("Der Tutor denkt nach …");
         } else {
